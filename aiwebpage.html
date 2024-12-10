@@ -3,218 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Game</title>
+    <title>Wordle Game</title>
     <style>
-        /* Basic Reset */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
             font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            text-align: center;
+            background-color: #f3f3f3;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* For the fireworks effect */
         }
-
-        #game-board {
-            position: relative;
-            width: 400px;
-            height: 400px;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            /* Add grid lines */
-            background-image: linear-gradient(to right, #444 1px, transparent 1px), 
-                              linear-gradient(to bottom, #444 1px, transparent 1px);
-            background-size: 20px 20px; /* Size of grid squares */
-
-            /* Clear defined border */
-            border: 5px solid #fff; /* Thicker white border */
-            border-radius: 10px;  /* Rounded corners for a smoother look */
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5); /* Subtle shadow for emphasis */
+        h1 {
+            color: #333;
         }
-
-        #score {
-            position: absolute;
-            top: 10px;
-            left: 10px;
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            grid-gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .tile {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #ccc;
+            text-transform: uppercase;
+            font-size: 1.5em;
+            line-height: 50px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .correct {
+            background-color: #6aaa64;
             color: white;
-            font-size: 18px;
         }
-
-        /* Snake segment styles */
-        .snake-segment {
+        .present {
+            background-color: #c9b458;
+            color: white;
+        }
+        .absent {
+            background-color: #787c7e;
+            color: white;
+        }
+        #message {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #333;
+        }
+        input[type="text"] {
+            margin-top: 20px;
+            font-size: 1em;
+            padding: 10px;
+            width: 250px;
+            text-align: center;
+        }
+        button {
+            font-size: 1em;
+            padding: 10px 20px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        #fireworks-canvas {
             position: absolute;
-            width: 18px;
-            height: 18px;
-            background-color: lime;
-            border-radius: 50%;  /* Make the segments round */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Prevent interference with inputs */
         }
-
-        .snake-head {
-            background-color: darkgreen;  /* Different color for the head */
-            width: 20px;  /* Make the head slightly bigger */
-            height: 20px;
-        }
-
-        /* Food styles */
-        .food {
-            position: absolute;
-            width: 18px;
-            height: 18px;
-            background-color: red;
-            border-radius: 50%;  /* Make the food round */
+        #restart-button {
+            display: none;
+            font-size: 1em;
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <div id="game-board">
-        <div id="score">Score: 0</div>
-    </div>
+    <canvas id="fireworks-canvas"></canvas>
+    <h1>Wordle Game</h1>
+    <div id="grid-container"></div>
+    <input type="text" id="guess-input" maxlength="5" placeholder="Enter your guess">
+    <button onclick="makeGuess()">Submit</button>
+    <p id="message"></p>
+    <button id="restart-button" onclick="restartGame()">Restart Game</button>
+
     <script>
-        // Game settings and variables
-        const gameBoard = document.getElementById('game-board');
-        const scoreElement = document.getElementById('score');
+        const words = ['apple', 'grape', 'melon', 'peach', 'cherry', 'lemon']; // List of words
+        let secretWord = words[Math.floor(Math.random() * words.length)]; // Select a random word
+        const maxAttempts = 6;
+        let currentRow = 0;
 
-        const boardSize = 20;  // 20x20 grid
-        const gridSize = 20;  // Each grid square size (in pixels)
-        let snake = [{ x: 9, y: 9 }];
-        let direction = 'RIGHT';
-        let food = { x: 5, y: 5 };
-        let score = 0;
-        let gameInterval;
-        let gameOver = false;
-        let gameStarted = false;  // New flag to check if the game has started
+        function createGrid() {
+            const gridContainer = document.getElementById("grid-container");
+            gridContainer.innerHTML = '';
+            for (let i = 0; i < maxAttempts; i++) {
+                const row = document.createElement("div");
+                row.classList.add("grid");
+                for (let j = 0; j < 5; j++) {
+                    const tile = document.createElement("div");
+                    tile.classList.add("tile");
+                    row.appendChild(tile);
+                }
+                gridContainer.appendChild(row);
+            }
+        }
 
-        // Function to update the game state
-        function updateGame() {
-            if (gameOver) {
-                clearInterval(gameInterval);
-                alert('Game Over! Your final score is ' + score);
-                resetGame();
+        function makeGuess() {
+            const guessInput = document.getElementById("guess-input");
+            const guess = guessInput.value.toLowerCase();
+
+            if (guess.length !== 5) {
+                setMessage("Please enter a 5-letter word.");
                 return;
             }
 
-            // Move snake
-            const head = { ...snake[0] };
-            if (direction === 'UP') head.y -= 1;
-            if (direction === 'DOWN') head.y += 1;
-            if (direction === 'LEFT') head.x -= 1;
-            if (direction === 'RIGHT') head.x += 1;
-
-            // Check for collisions with walls
-            if (head.x < 0 || head.x >= boardSize || head.y < 0 || head.y >= boardSize || isCollision(head)) {
-                gameOver = true;
-            } else {
-                // Add new head to snake
-                snake.unshift(head);
-
-                // Check if snake ate food
-                if (head.x === food.x && head.y === food.y) {
-                    score++;
-                    spawnFood();
-                } else {
-                    snake.pop();  // Remove last part of snake (tail)
-                }
-
-                // Update the score
-                scoreElement.textContent = 'Score: ' + score;
-
-                // Clear the game board and draw snake and food
-                drawBoard();
-            }
-        }
-
-        // Function to check if the snake collides with itself
-        function isCollision(head) {
-            for (let i = 1; i < snake.length; i++) {
-                if (snake[i].x === head.x && snake[i].y === head.y) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Function to draw the game board
-        function drawBoard() {
-            // Clear the board
-            gameBoard.innerHTML = '<div id="score">Score: ' + score + '</div>';
-
-            // Draw the snake
-            snake.forEach((segment, index) => {
-                const segmentElement = document.createElement('div');
-                segmentElement.classList.add('snake-segment');
-                segmentElement.style.left = `${segment.x * gridSize}px`;
-                segmentElement.style.top = `${segment.y * gridSize}px`;
-
-                // Make the first segment (head) different
-                if (index === 0) {
-                    segmentElement.classList.add('snake-head');
-                }
-
-                gameBoard.appendChild(segmentElement);
-            });
-
-            // Draw the food
-            const foodElement = document.createElement('div');
-            foodElement.classList.add('food');
-            foodElement.style.left = `${food.x * gridSize}px`;
-            foodElement.style.top = `${food.y * gridSize}px`;
-            gameBoard.appendChild(foodElement);
-        }
-
-        // Function to spawn new food at a random position
-        function spawnFood() {
-            let newFood;
-            do {
-                newFood = {
-                    x: Math.floor(Math.random() * boardSize),
-                    y: Math.floor(Math.random() * boardSize),
-                };
-            } while (isFoodOnSnake(newFood));
-
-            food = newFood;
-        }
-
-        // Function to check if food spawns on the snake
-        function isFoodOnSnake(newFood) {
-            return snake.some(segment => segment.x === newFood.x && segment.y === newFood.y);
-        }
-
-        // Event listener for controlling the snake
-        document.addEventListener('keydown', (e) => {
-            // Start the game when the user presses any arrow key
-            if (!gameStarted) {
-                gameStarted = true;
-                gameInterval = setInterval(updateGame, 100);  // Start the game
+            if (currentRow >= maxAttempts) {
+                setMessage(`Game over! The word was '${secretWord}'.`);
+                showRestartButton();
+                return;
             }
 
-            if (e.key === 'ArrowUp' && direction !== 'DOWN') direction = 'UP';
-            if (e.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
-            if (e.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
-            if (e.key === 'ArrowRight' && direction !== 'LEFT') direction = 'RIGHT';
-        });
+            const row = document.getElementsByClassName("grid")[currentRow];
+            const tiles = row.getElementsByClassName("tile");
 
-        // Function to reset the game
-        function resetGame() {
-            snake = [{ x: 9, y: 9 }];
-            direction = 'RIGHT';
-            food = { x: 5, y: 5 };
-            score = 0;
-            gameOver = false;
-            gameStarted = false;
-            scoreElement.textContent = 'Score: ' + score;
-            gameBoard.innerHTML = '<div id="score">Score: 0</div>';  // Clear the board
+            let feedback = Array(5).fill("absent");
+            let secretWordArray = secretWord.split("");
+
+            // First pass: mark correct positions
+            for (let i = 0; i < 5; i++) {
+                if (guess[i] === secretWord[i]) {
+                    feedback[i] = "correct";
+                    secretWordArray[i] = null; // Remove from consideration
+                }
+            }
+
+            // Second pass: mark present letters
+            for (let i = 0; i < 5; i++) {
+                if (feedback[i] === "absent" && secretWordArray.includes(guess[i])) {
+                    feedback[i] = "present";
+                    secretWordArray[secretWordArray.indexOf(guess[i])] = null; // Remove from consideration
+                }
+            }
+
+            // Display feedback
+            for (let i = 0; i < 5; i++) {
+                tiles[i].textContent = guess[i];
+                tiles[i].classList.add(feedback[i]);
+            }
+
+            if (guess === secretWord) {
+                setMessage("🎉 Congratulations! You've guessed the word!");
+                showRestartButton();
+                startFireworks();
+                return;
+            } else if (currentRow === maxAttempts - 1) {
+                setMessage(`Game over! The word was '${secretWord}'.`);
+                showRestartButton();
+            }
+
+            currentRow++;
+            guessInput.value = "";
         }
+
+        function setMessage(msg) {
+            const message = document.getElementById("message");
+            message.textContent = msg;
+        }
+
+        function showRestartButton() {
+            document.getElementById("restart-button").style.display = "block";
+        }
+
+        function restartGame() {
+            secretWord = words[Math.floor(Math.random() * words.length)]; // Pick a new word
+            currentRow = 0;
+            setMessage('');
+            document.getElementById("guess-input").value = '';
+            document.getElementById("restart-button").style.display = "none";
+            createGrid();
+        }
+
+        function startFireworks() {
+            const canvas = document.getElementById("fireworks-canvas");
+            const ctx = canvas.getContext("2d");
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"];
+
+            function createParticle(x, y) {
+                for (let i = 0; i < 100; i++) {
+                    particles.push({
+                        x: x,
+                        y: y,
+                        dx: (Math.random() - 0.5) * 6,
+                        dy: (Math.random() - 0.5) * 6,
+                        radius: Math.random() * 3 + 2,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        life: 100
+                    });
+                }
+            }
+
+            function updateParticles() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color;
+                    ctx.fill();
+
+                    p.x += p.dx;
+                    p.y += p.dy;
+                    p.radius *= 0.98;
+                    p.life--;
+
+                    if (p.life <= 0) {
+                        particles.splice(i, 1);
+                    }
+                }
+            }
+
+            function animate() {
+                updateParticles();
+                if (particles.length > 0) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            createParticle(canvas.width / 2, canvas.height / 2);
+            animate();
+        }
+
+        // Initialize the game
+        createGrid();
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
 
 
 
